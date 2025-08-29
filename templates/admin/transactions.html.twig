@@ -1,0 +1,309 @@
+{% extends 'admin/base.html.twig' %}
+
+{% block title %}Transactions - Backoffice Crypto{% endblock %}
+{% block page_title %}Historique des transactions{% endblock %}
+{% block page_subtitle %}Suivi complet de toutes les opérations{% endblock %}
+
+{% block body_content %}
+<!-- Statistics Cards -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="stats-card">
+        <div class="stats-icon">
+            <i class="fas fa-exchange-alt"></i>
+        </div>
+        <div class="stats-value">{{ transactions|length }}</div>
+        <div class="stats-label">Total transactions</div>
+    </div>
+    
+    <div class="stats-card">
+        <div class="stats-icon">
+            <i class="fas fa-shopping-cart"></i>
+        </div>
+        <div class="stats-value">{{ transactions|filter(t => t.type == 'achat')|length }}</div>
+        <div class="stats-label">Achats</div>
+    </div>
+    
+    <div class="stats-card">
+        <div class="stats-icon">
+            <i class="fas fa-hand-holding-usd"></i>
+        </div>
+        <div class="stats-value">{{ transactions|filter(t => t.type == 'vente')|length }}</div>
+        <div class="stats-label">Ventes</div>
+    </div>
+    
+    <div class="stats-card">
+        <div class="stats-icon">
+            <i class="fas fa-euro-sign"></i>
+        </div>
+        <div class="stats-value">{{ transactions|map(t => t.totalValue)|reduce((a, b) => a + b, 0)|number_format(0) }}€</div>
+        <div class="stats-label">Volume total</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-body" style="padding: 1rem;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; align-items: end;">
+            <div>
+                <label style="display: block; font-weight: 600; color: var(--gray-900); margin-bottom: 0.5rem; font-size: 0.875rem;">
+                    Type de transaction
+                </label>
+                <select class="form-control" id="filter-type" onchange="filterTransactions()">
+                    <option value="">Tous</option>
+                    <option value="achat">Achats</option>
+                    <option value="vente">Ventes</option>
+                    <option value="transfert">Transferts</option>
+                </select>
+            </div>
+            <div>
+                <label style="display: block; font-weight: 600; color: var(--gray-900); margin-bottom: 0.5rem; font-size: 0.875rem;">
+                    Cryptomonnaie
+                </label>
+                <select class="form-control" id="filter-crypto" onchange="filterTransactions()">
+                    <option value="">Toutes</option>
+                    {% set used_cryptos = [] %}
+                    {% for transaction in transactions %}
+                        {% if transaction.crypto.symbol not in used_cryptos %}
+                            {% set used_cryptos = used_cryptos|merge([transaction.crypto.symbol]) %}
+                            <option value="{{ transaction.crypto.symbol }}">{{ transaction.crypto.symbol }} - {{ transaction.crypto.name }}</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display: block; font-weight: 600; color: var(--gray-900); margin-bottom: 0.5rem; font-size: 0.875rem;">
+                    Visibilité
+                </label>
+                <select class="form-control" id="filter-visibility" onchange="filterTransactions()">
+                    <option value="">Toutes</option>
+                    <option value="visible">Visibles</option>
+                    <option value="hidden">Masquées</option>
+                </select>
+            </div>
+            <div>
+                <button class="btn btn-outline-primary w-100" onclick="resetFilters()">
+                    <i class="fas fa-undo"></i>
+                    Reset
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Transactions Table -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">
+            <i class="fas fa-list" style="margin-right: 0.5rem;"></i>
+            Historique complet
+        </h2>
+    </div>
+    <div class="card-body" style="padding: 0;">
+        <div style="overflow-x: auto;">
+            <table class="table" id="transactions-table">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;">ID</th>
+                        <th>Date & Heure</th>
+                        <th>Utilisateur</th>
+                        <th>Crypto</th>
+                        <th>Type</th>
+                        <th>Montant</th>
+                        <th>Prix unitaire</th>
+                        <th>Valeur totale</th>
+                        <th>Statut</th>
+                        <th style="width: 120px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for transaction in transactions %}
+                    <tr class="transaction-row" 
+                        data-type="{{ transaction.type }}" 
+                        data-crypto="{{ transaction.crypto.symbol }}" 
+                        data-visibility="{{ transaction.isVisible ? 'visible' : 'hidden' }}">
+                        <td style="font-weight: 600; color: var(--gray-600);">#{{ transaction.id }}</td>
+                        <td>
+                            <div style="font-weight: 600; color: var(--gray-900);">{{ transaction.createdAt|date('d/m/Y') }}</div>
+                            <div style="font-size: 0.8125rem; color: var(--gray-600);">{{ transaction.createdAt|date('H:i:s') }}</div>
+                        </td>
+                        <td>
+                            <div style="display: flex; align-items: center;">
+                                <div style="width: 28px; height: 28px; background: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;">
+                                    <i class="fas fa-user" style="color: white; font-size: 0.7rem;"></i>
+                                </div>
+                                <div>
+                                    <a href="{{ path('admin_user_wallets', {'id': transaction.user.id}) }}" 
+                                       style="color: var(--primary-color); text-decoration: none; font-weight: 600;">
+                                        {{ transaction.user.username }}
+                                    </a>
+                                    {% if transaction.user.isSuperAdmin %}
+                                        <div><span class="badge badge-danger" style="font-size: 0.7rem;">ADMIN</span></div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div style="display: flex; align-items: center;">
+                                <div style="width: 28px; height: 28px; background: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 0.5rem;">
+                                    <i class="fab fa-bitcoin" style="color: white; font-size: 0.7rem;"></i>
+                                </div>
+                                <div>
+                                    <span class="badge badge-primary">{{ transaction.crypto.symbol }}</span>
+                                    <div style="font-size: 0.8125rem; color: var(--gray-600);">{{ transaction.crypto.name }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if transaction.type == 'achat' %}
+                                <span class="badge badge-success">
+                                    <i class="fas fa-plus" style="margin-right: 0.25rem;"></i>
+                                    Achat
+                                </span>
+                            {% elseif transaction.type == 'vente' %}
+                                <span class="badge badge-warning">
+                                    <i class="fas fa-minus" style="margin-right: 0.25rem;"></i>
+                                    Vente
+                                </span>
+                            {% else %}
+                                <span class="badge badge-primary">
+                                    <i class="fas fa-exchange-alt" style="margin-right: 0.25rem;"></i>
+                                    {{ transaction.typeLabel }}
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="crypto-price" style="font-weight: 600;">{{ transaction.amount|number_format(8, '.', '') }}</td>
+                        <td class="crypto-price">{{ transaction.crypto.currentPrice|number_format(2, ',', ' ') }}€</td>
+                        <td class="crypto-price" style="font-weight: 700; color: var(--primary-color);">{{ transaction.totalValue|number_format(2, ',', ' ') }}€</td>
+                        <td>
+                            {% if transaction.isVisible %}
+                                <span class="badge badge-success">
+                                    <i class="fas fa-eye" style="margin-right: 0.25rem;"></i>
+                                    Visible
+                                </span>
+                            {% else %}
+                                <span class="badge badge-danger">
+                                    <i class="fas fa-eye-slash" style="margin-right: 0.25rem;"></i>
+                                    Masquée
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 0.25rem;">
+                                <button class="btn btn-outline-primary btn-sm" 
+                                        onclick="toggleTransactionVisibility({{ transaction.id }})"
+                                        title="{% if transaction.isVisible %}Masquer{% else %}Afficher{% endif %}">
+                                    <i class="fas fa-{% if transaction.isVisible %}eye-slash{% else %}eye{% endif %}"></i>
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm" 
+                                        onclick="deleteTransaction({{ transaction.id }})"
+                                        title="Supprimer">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="10" style="text-align: center; color: var(--gray-600); padding: 2rem;">
+                            <i class="fas fa-exchange-alt" style="font-size: 2rem; margin-bottom: 1rem; color: var(--gray-400);"></i><br>
+                            Aucune transaction trouvée
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function filterTransactions() {
+    const typeFilter = document.getElementById('filter-type').value;
+    const cryptoFilter = document.getElementById('filter-crypto').value;
+    const visibilityFilter = document.getElementById('filter-visibility').value;
+    
+    const rows = document.querySelectorAll('.transaction-row');
+    
+    rows.forEach(row => {
+        let show = true;
+        
+        if (typeFilter && row.dataset.type !== typeFilter) {
+            show = false;
+        }
+        
+        if (cryptoFilter && row.dataset.crypto !== cryptoFilter) {
+            show = false;
+        }
+        
+        if (visibilityFilter && row.dataset.visibility !== visibilityFilter) {
+            show = false;
+        }
+        
+        row.style.display = show ? '' : 'none';
+    });
+}
+
+function resetFilters() {
+    document.getElementById('filter-type').value = '';
+    document.getElementById('filter-crypto').value = '';
+    document.getElementById('filter-visibility').value = '';
+    
+    const rows = document.querySelectorAll('.transaction-row');
+    rows.forEach(row => {
+        row.style.display = '';
+    });
+}
+
+function toggleTransactionVisibility(transactionId) {
+    fetch(`/admin/transactions/${transactionId}/toggle-visibility`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification('Visibilité mise à jour !', 'success');
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            showNotification('Erreur: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showNotification('Erreur de connexion', 'error');
+        console.error('Error:', error);
+    });
+}
+
+function deleteTransaction(transactionId) {
+    if (confirm('Êtes-vous sûr de vouloir supprimer cette transaction ? Cette action est irréversible.')) {
+        fetch(`/admin/transactions/${transactionId}/delete`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Transaction supprimée !', 'success');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                showNotification('Erreur: ' + data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showNotification('Erreur de connexion', 'error');
+            console.error('Error:', error);
+        });
+    }
+}
+</script>
+{% endblock %}

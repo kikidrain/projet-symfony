@@ -1,0 +1,180 @@
+{% extends 'admin/base.html.twig' %}
+
+{% block title %}{{ crypto.name }} - Historique - Backoffice Crypto{% endblock %}
+{% block page_title %}{{ crypto.name }} ({{ crypto.symbol }}) - Historique{% endblock %}
+
+{% block body %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h3>{{ crypto.name }}</h3>
+                        <p class="text-muted">{{ crypto.description }}</p>
+                        <p><strong>Symbole:</strong> <span class="badge bg-primary fs-6">{{ crypto.symbol }}</span></p>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <h2 class="crypto-price">{{ crypto.currentPrice|number_format(2, ',', ' ') }}€</h2>
+                        <small class="text-muted">Dernière mise à jour: {{ crypto.lastUpdated|date('d/m/Y H:i:s') }}</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5>Actions rapides</h5>
+                <button class="btn btn-warning btn-sm" onclick="updatePrices()">
+                    <i class="fas fa-sync-alt"></i> Mettre à jour le prix
+                </button>
+                <a href="{{ path('admin_cryptos') }}" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-arrow-left"></i> Retour
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-line"></i> Historique des prix (30 derniers jours)</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="priceChart" height="100"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-list"></i> Derniers prix enregistrés</h5>
+            </div>
+            <div class="card-body">
+                <div style="max-height: 400px; overflow-y: auto;">
+                    {% for price in history|slice(0, 20) %}
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <small class="text-muted">{{ price.recordedAt|date('d/m H:i') }}</small>
+                        <span class="crypto-price">{{ price.price|number_format(2, ',', ' ') }}€</span>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-muted">Aucun historique</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-exchange-alt"></i> Transactions récentes pour {{ crypto.symbol }}</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Utilisateur</th>
+                                <th>Type</th>
+                                <th>Montant</th>
+                                <th>Prix</th>
+                                <th>Valeur</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for transaction in transactions %}
+                            <tr>
+                                <td>{{ transaction.createdAt|date('d/m/Y H:i') }}</td>
+                                <td>
+                                    <a href="{{ path('admin_user_wallets', {'id': transaction.user.id}) }}">
+                                        {{ transaction.user.username }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="transaction-type-{{ transaction.type|replace({'_': '-'}) }}">
+                                        {{ transaction.typeLabel }}
+                                    </span>
+                                </td>
+                                <td>{{ transaction.amount|number_format(8, '.', '') }}</td>
+                                <td class="crypto-price">{{ transaction.priceAtTransaction|number_format(2, ',', ' ') }}€</td>
+                                <td>{{ transaction.totalValue|number_format(2, ',', ' ') }}€</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center">Aucune transaction pour cette crypto</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Créer le graphique des prix
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    const priceData = [
+        {% for price in history %}
+        {
+            x: '{{ price.recordedAt|date('Y-m-d H:i:s') }}',
+            y: {{ price.price }}
+        },
+        {% endfor %}
+    ];
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            datasets: [{
+                label: '{{ crypto.symbol }} Prix',
+                data: priceData,
+                borderColor: '#667eea',
+                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Évolution du prix de {{ crypto.name }}'
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: {
+                        unit: 'day',
+                        displayFormats: {
+                            day: 'DD/MM'
+                        }
+                    }
+                },
+                y: {
+                    beginAtZero: false,
+                    ticks: {
+                        callback: function(value) {
+                            return value.toFixed(2) + '€';
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+
+{% endblock %}

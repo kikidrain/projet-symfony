@@ -1,0 +1,218 @@
+{% extends 'base.html.twig' %}
+
+{% block body %}
+<div class="container-fluid p-0">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <a href="{{ path('admin_dashboard') }}" class="sidebar-brand">
+                <i class="fas fa-coins"></i>
+                Crypto Admin
+            </a>
+        </div>
+        
+        <div class="sidebar-nav">
+            <ul class="nav flex-column">
+                <li class="nav-item">
+                    <a class="nav-link {{ app.request.get('_route') == 'admin_dashboard' ? 'active' : '' }}" 
+                       href="{{ path('admin_dashboard') }}">
+                        <i class="fas fa-chart-line"></i>
+                        Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ app.request.get('_route') == 'admin_users' ? 'active' : '' }}" 
+                       href="{{ path('admin_users') }}">
+                        <i class="fas fa-users"></i>
+                        Utilisateurs
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ app.request.get('_route') == 'admin_cryptos' ? 'active' : '' }}" 
+                       href="{{ path('admin_cryptos') }}">
+                        <i class="fas fa-coins"></i>
+                        Cryptomonnaies
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ app.request.get('_route') == 'admin_transactions' ? 'active' : '' }}" 
+                       href="{{ path('admin_transactions') }}">
+                        <i class="fas fa-exchange-alt"></i>
+                        Transactions
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {{ app.request.get('_route') == 'admin_transfer_crypto' ? 'active' : '' }}" 
+                       href="{{ path('admin_transfer_crypto') }}">
+                        <i class="fas fa-user-secret"></i>
+                        Transfert Secret
+                    </a>
+                </li>
+            </ul>
+            
+            <div style="margin-top: 2rem;">
+                <button class="btn btn-outline-primary w-100" onclick="updatePrices()">
+                    <i class="fas fa-sync-alt"></i>
+                    Actualiser les prix
+                </button>
+            </div>
+        </div>
+        
+        <div style="margin-top: auto; padding: 1.5rem;">
+            <div class="user-info">
+                <div class="user-role">Super Admin</div>
+                <div class="user-email">{{ app.user.email }}</div>
+                <a href="{{ path('app_logout') }}" class="btn btn-outline-primary btn-sm">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Déconnexion
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main content -->
+    <div class="main-content">
+        <!-- Top header -->
+        <header class="top-header">
+            <div class="header-content">
+                <div>
+                    <h1 class="page-title">
+                        {% block page_title %}{% endblock %}
+                    </h1>
+                    <p class="page-subtitle">
+                        {% block page_subtitle %}Gestion avancée des cryptomonnaies{% endblock %}
+                    </p>
+                </div>
+                <div class="header-actions">
+                    <div class="d-flex align-items-center">
+                        <span class="badge badge-success">
+                            <i class="fas fa-circle" style="font-size: 0.5rem; margin-right: 0.25rem;"></i>
+                            En ligne
+                        </span>
+                    </div>
+                    <div class="text-muted" style="font-size: 0.875rem;">
+                        <i class="fas fa-clock" style="margin-right: 0.25rem;"></i>
+                        <span id="current-time"></span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Page content -->
+        <div style="padding: 2rem;">
+            <div class="fade-in-up">
+                {% block body_content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Horloge temps réel
+    function updateTime() {
+        const now = new Date();
+        const timeString = now.toLocaleTimeString('fr-FR');
+        document.getElementById('current-time').textContent = timeString;
+    }
+    
+    updateTime();
+    setInterval(updateTime, 1000);
+    
+    // Animation des cartes au chargement
+    document.addEventListener('DOMContentLoaded', function() {
+        const cards = document.querySelectorAll('.card, .stats-card');
+        cards.forEach((card, index) => {
+            setTimeout(() => {
+                card.classList.add('fade-in-up');
+            }, index * 100);
+        });
+    });
+    
+    // Fonction pour mettre à jour les prix
+    function updatePrices() {
+        const btn = event.target.closest('button');
+        const icon = btn.querySelector('i');
+        
+        icon.style.animation = 'spin 1s linear infinite';
+        btn.disabled = true;
+        
+        fetch('{{ path('admin_realtime_prices') }}', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            icon.style.animation = '';
+            btn.disabled = false;
+            
+            if (data.success) {
+                // Afficher notification de succès
+                showNotification('Prix mis à jour avec succès !', 'success');
+                
+                // Mettre à jour les prix visuellement
+                updatePriceElements(data.prices);
+            } else {
+                showNotification('Erreur lors de la mise à jour', 'error');
+            }
+        })
+        .catch(error => {
+            icon.style.animation = '';
+            btn.disabled = false;
+            showNotification('Erreur de connexion', 'error');
+            console.error('Error:', error);
+        });
+    }
+    
+    // Fonction pour afficher les notifications
+    function showNotification(message, type = 'success') {
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type === 'success' ? 'success' : 'danger'}`;
+        notification.style.cssText = 'position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px; animation: fadeInUp 0.3s ease;';
+        notification.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'}"></i> ${message}`;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.remove();
+        }, 3000);
+    }
+    
+    // Mise à jour automatique des prix toutes les 30 secondes
+    setInterval(() => {
+        fetch('{{ path('admin_realtime_prices') }}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.prices) {
+                updatePriceElements(data.prices);
+            }
+        })
+        .catch(error => {
+            console.error('Erreur mise à jour automatique:', error);
+        });
+    }, 30000);
+    
+    // Fonction pour mettre à jour les éléments de prix visuellement
+    function updatePriceElements(prices) {
+        if (!prices) return;
+        
+        // Mise à jour des prix dans les cartes
+        prices.forEach(crypto => {
+            const priceElement = document.querySelector(`[data-crypto="${crypto.symbol}"] .crypto-price`);
+            if (priceElement) {
+                priceElement.textContent = `${crypto.price.toLocaleString('fr-FR', {minimumFractionDigits: 2})} €`;
+                
+                // Animation de mise à jour
+                priceElement.style.transition = 'all 0.3s ease';
+                priceElement.style.transform = 'scale(1.05)';
+                priceElement.style.color = 'var(--success)';
+                
+                setTimeout(() => {
+                    priceElement.style.transform = 'scale(1)';
+                    priceElement.style.color = 'var(--primary-color)';
+                }, 300);
+            }
+        });
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,174 @@
+{% extends 'admin/base.html.twig' %}
+
+{% block title %}Utilisateurs - Backoffice Crypto{% endblock %}
+{% block page_title %}Gestion des utilisateurs{% endblock %}
+{% block page_subtitle %}Administration et contrôle des comptes utilisateurs{% endblock %}
+
+{% block body_content %}
+<!-- Statistics Cards -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="stats-card">
+        <div class="stats-icon">
+            <i class="fas fa-users"></i>
+        </div>
+        <div class="stats-value">{{ users|length }}</div>
+        <div class="stats-label">Total utilisateurs</div>
+    </div>
+    
+    <div class="stats-card">
+        <div class="stats-icon">
+            <i class="fas fa-user-shield"></i>
+        </div>
+        <div class="stats-value">{{ users|filter(u => u.isSuperAdmin)|length }}</div>
+        <div class="stats-label">Super admins</div>
+    </div>
+    
+    <div class="stats-card">
+        <div class="stats-icon">
+            <i class="fas fa-user-check"></i>
+        </div>
+        <div class="stats-value">{{ users|filter(u => u.isActive)|length }}</div>
+        <div class="stats-label">Comptes actifs</div>
+    </div>
+    
+    <div class="stats-card">
+        <div class="stats-icon">
+            <i class="fas fa-user-clock"></i>
+        </div>
+        <div class="stats-value">{{ users|filter(u => u.createdAt|date('Y-m-d') == 'now'|date('Y-m-d'))|length }}</div>
+        <div class="stats-label">Nouveaux aujourd'hui</div>
+    </div>
+</div>
+
+<!-- Users Table -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">
+            <i class="fas fa-users" style="margin-right: 0.5rem;"></i>
+            Liste des utilisateurs
+        </h2>
+    </div>
+    <div class="card-body" style="padding: 0;">
+        <div style="overflow-x: auto;">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;">ID</th>
+                        <th>Utilisateur</th>
+                        <th>Email</th>
+                        <th>Rôles</th>
+                        <th>Inscription</th>
+                        <th>Status</th>
+                        <th style="width: 200px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td style="font-weight: 600; color: var(--gray-600);">#{{ user.id }}</td>
+                        <td>
+                            <div style="display: flex; align-items: center;">
+                                <div style="width: 32px; height: 32px; background: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 0.75rem;">
+                                    <i class="fas fa-user" style="color: white; font-size: 0.8rem;"></i>
+                                </div>
+                                <div>
+                                    <div style="font-weight: 600; color: var(--gray-900);">{{ user.username }}</div>
+                                    {% if user.isSuperAdmin %}
+                                        <span class="badge badge-danger" style="font-size: 0.7rem;">SUPER ADMIN</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>{{ user.email }}</td>
+                        <td>
+                            {% for role in user.roles %}
+                                {% if role != 'ROLE_USER' %}
+                                    <span class="badge badge-primary">{{ role|replace({'ROLE_': ''})|title }}</span>
+                                {% endif %}
+                            {% endfor %}
+                            {% if user.roles|length == 1 and 'ROLE_USER' in user.roles %}
+                                <span class="badge badge-primary">User</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size: 0.875rem; color: var(--gray-600);">
+                            {{ user.createdAt|date('d/m/Y') }}<br>
+                            <small>{{ user.createdAt|date('H:i') }}</small>
+                        </td>
+                        <td>
+                            {% if user.isActive %}
+                                <span class="badge badge-success">
+                                    <i class="fas fa-check-circle" style="margin-right: 0.25rem;"></i>
+                                    Actif
+                                </span>
+                            {% else %}
+                                <span class="badge badge-danger">
+                                    <i class="fas fa-times-circle" style="margin-right: 0.25rem;"></i>
+                                    Inactif
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <a href="{{ path('admin_user_wallets', {'id': user.id}) }}" 
+                                   class="btn btn-outline-primary btn-sm" 
+                                   title="Voir les portefeuilles">
+                                    <i class="fas fa-wallet"></i>
+                                </a>
+                                <a href="{{ path('admin_user_transactions', {'id': user.id}) }}" 
+                                   class="btn btn-outline-primary btn-sm" 
+                                   title="Voir les transactions">
+                                    <i class="fas fa-exchange-alt"></i>
+                                </a>
+                                {% if not user.isSuperAdmin %}
+                                <button class="btn btn-outline-danger btn-sm" 
+                                        onclick="toggleUserStatus({{ user.id }})"
+                                        title="{% if user.isActive %}Désactiver{% else %}Activer{% endif %}">
+                                    <i class="fas fa-{% if user.isActive %}ban{% else %}check{% endif %}"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" style="text-align: center; color: var(--gray-600); padding: 2rem;">
+                            <i class="fas fa-users" style="font-size: 2rem; margin-bottom: 1rem; color: var(--gray-400);"></i><br>
+                            Aucun utilisateur trouvé
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleUserStatus(userId) {
+    if (confirm('Êtes-vous sûr de vouloir changer le statut de cet utilisateur ?')) {
+        fetch(`/admin/users/${userId}/toggle-status`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Statut utilisateur mis à jour !', 'success');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                showNotification('Erreur: ' + data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showNotification('Erreur de connexion', 'error');
+            console.error('Error:', error);
+        });
+    }
+}
+</script>
+{% endblock %}

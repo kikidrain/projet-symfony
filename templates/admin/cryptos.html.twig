@@ -1,0 +1,259 @@
+{% extends 'admin/base.html.twig' %}
+
+{% block title %}Cryptomonnaies - Backoffice Crypto{% endblock %}
+{% block page_title %}Gestion des cryptomonnaies{% endblock %}
+{% block page_subtitle %}Contrôle des prix et historiques des crypto-actifs{% endblock %}
+
+{% block body_content %}
+<!-- Statistics Cards -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="stats-card">
+        <div class="stats-icon">
+            <i class="fas fa-coins"></i>
+        </div>
+        <div class="stats-value">{{ cryptos|length }}</div>
+        <div class="stats-label">Cryptomonnaies</div>
+    </div>
+    
+    <div class="stats-card">
+        <div class="stats-icon">
+            <i class="fas fa-chart-line"></i>
+        </div>
+        <div class="stats-value">{{ cryptos|map(c => c.currentPrice)|reduce((a, b) => a + b, 0)|number_format(0) }}€</div>
+        <div class="stats-label">Valeur totale</div>
+    </div>
+    
+    <div class="stats-card">
+        <div class="stats-icon">
+            <i class="fas fa-sync-alt"></i>
+        </div>
+        <div class="stats-value" id="last-update">{{ cryptos[0].lastUpdated|date('H:i') }}</div>
+        <div class="stats-label">Dernière MAJ</div>
+    </div>
+    
+    <div class="stats-card">
+        <div class="stats-icon">
+            <i class="fas fa-crown"></i>
+        </div>
+        <div class="stats-value">{{ cryptos|sort((a, b) => b.currentPrice <=> a.currentPrice)|first.symbol }}</div>
+        <div class="stats-label">Plus cher</div>
+    </div>
+</div>
+
+<!-- Actions Bar -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+    <div style="display: flex; gap: 1rem;">
+        <button class="btn btn-primary" onclick="updateAllPrices()">
+            <i class="fas fa-sync-alt"></i>
+            Actualiser tous les prix
+        </button>
+        <button class="btn btn-outline-primary" onclick="toggleAutoRefresh()">
+            <i class="fas fa-play" id="auto-refresh-icon"></i>
+            <span id="auto-refresh-text">Auto-refresh</span>
+        </button>
+    </div>
+    <div style="color: var(--gray-600); font-size: 0.875rem;">
+        <i class="fas fa-info-circle"></i>
+        Mise à jour automatique toutes les 30 secondes
+    </div>
+</div>
+
+<!-- Crypto Grid -->
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem;">
+    {% for crypto in cryptos %}
+    <div class="card crypto-card" data-crypto="{{ crypto.symbol }}" style="transition: all 0.3s ease;">
+        <div class="card-body">
+            <div style="display: flex; justify-content: between; align-items: flex-start; margin-bottom: 1rem;">
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 48px; height: 48px; background: var(--primary-color); border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-right: 1rem;">
+                        <i class="fab fa-bitcoin" style="color: white; font-size: 1.5rem;"></i>
+                    </div>
+                    <div>
+                        <div style="font-size: 1.25rem; font-weight: 700; color: var(--gray-900);">{{ crypto.symbol }}</div>
+                        <div style="color: var(--gray-600); font-size: 0.875rem;">{{ crypto.name }}</div>
+                    </div>
+                </div>
+                <button class="btn btn-outline-primary btn-sm" onclick="updateSinglePrice({{ crypto.id }})" title="Actualiser">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            
+            <div style="margin-bottom: 1rem;">
+                <div style="font-size: 2rem; font-weight: 700; color: var(--primary-color); margin-bottom: 0.25rem;" class="crypto-price">
+                    {{ crypto.currentPrice|number_format(2, ',', ' ') }}€
+                </div>
+                <div style="color: var(--gray-600); font-size: 0.875rem;">
+                    <i class="fas fa-clock" style="margin-right: 0.25rem;"></i>
+                    Mis à jour le {{ crypto.lastUpdated|date('d/m/Y à H:i') }}
+                </div>
+            </div>
+            
+            <div style="padding: 0.75rem; background: var(--gray-50); border-radius: 8px; margin-bottom: 1rem;">
+                <div style="font-size: 0.8125rem; color: var(--gray-700); line-height: 1.4;">
+                    {{ crypto.description|slice(0, 100) }}{% if crypto.description|length > 100 %}...{% endif %}
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 0.5rem;">
+                <a href="{{ path('admin_crypto_history', {'id': crypto.id}) }}" 
+                   class="btn btn-outline-primary btn-sm" style="flex: 1;">
+                    <i class="fas fa-chart-line"></i>
+                    Historique
+                </a>
+                <button class="btn btn-outline-primary btn-sm" 
+                        onclick="showCryptoDetails({{ crypto.id }})" 
+                        style="flex: 1;">
+                    <i class="fas fa-info-circle"></i>
+                    Détails
+                </button>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div style="grid-column: 1 / -1; text-align: center; color: var(--gray-600); padding: 3rem;">
+        <i class="fas fa-coins" style="font-size: 3rem; margin-bottom: 1rem; color: var(--gray-400);"></i><br>
+        Aucune cryptomonnaie trouvée
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+let autoRefreshInterval = null;
+let isAutoRefreshActive = false;
+
+// Mise à jour de tous les prix
+function updateAllPrices() {
+    const btn = event.target.closest('button');
+    const icon = btn.querySelector('i');
+    
+    icon.style.animation = 'spin 1s linear infinite';
+    btn.disabled = true;
+    
+    fetch('{{ path('admin_realtime_prices') }}', {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        icon.style.animation = '';
+        btn.disabled = false;
+        
+        if (data.success && data.prices) {
+            showNotification('Prix mis à jour avec succès !', 'success');
+            updatePriceElements(data.prices);
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'});
+        } else {
+            showNotification('Erreur lors de la mise à jour', 'error');
+        }
+    })
+    .catch(error => {
+        icon.style.animation = '';
+        btn.disabled = false;
+        showNotification('Erreur de connexion', 'error');
+        console.error('Error:', error);
+    });
+}
+
+// Mise à jour d'un prix individuel
+function updateSinglePrice(cryptoId) {
+    const btn = event.target.closest('button');
+    const icon = btn.querySelector('i');
+    
+    icon.style.animation = 'spin 1s linear infinite';
+    btn.disabled = true;
+    
+    fetch(`/admin/crypto/${cryptoId}/update-price`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        icon.style.animation = '';
+        btn.disabled = false;
+        
+        if (data.success) {
+            showNotification('Prix mis à jour !', 'success');
+            // Mettre à jour visuellement la carte
+            const card = btn.closest('.crypto-card');
+            const priceElement = card.querySelector('.crypto-price');
+            if (priceElement) {
+                priceElement.textContent = `${data.newPrice.toLocaleString('fr-FR', {minimumFractionDigits: 2})}€`;
+                
+                // Animation de mise à jour
+                card.style.transform = 'scale(1.02)';
+                card.style.boxShadow = '0 8px 25px rgba(149, 190, 207, 0.4)';
+                setTimeout(() => {
+                    card.style.transform = 'scale(1)';
+                    card.style.boxShadow = '';
+                }, 300);
+            }
+        } else {
+            showNotification('Erreur: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        icon.style.animation = '';
+        btn.disabled = false;
+        showNotification('Erreur de connexion', 'error');
+        console.error('Error:', error);
+    });
+}
+
+// Toggle auto-refresh
+function toggleAutoRefresh() {
+    const icon = document.getElementById('auto-refresh-icon');
+    const text = document.getElementById('auto-refresh-text');
+    
+    if (isAutoRefreshActive) {
+        clearInterval(autoRefreshInterval);
+        isAutoRefreshActive = false;
+        icon.className = 'fas fa-play';
+        text.textContent = 'Auto-refresh';
+        showNotification('Auto-refresh désactivé', 'info');
+    } else {
+        autoRefreshInterval = setInterval(() => {
+            updateAllPrices();
+        }, 30000);
+        isAutoRefreshActive = true;
+        icon.className = 'fas fa-pause';
+        text.textContent = 'Stop auto-refresh';
+        showNotification('Auto-refresh activé (30s)', 'success');
+    }
+}
+
+// Fonction pour mettre à jour les éléments de prix visuellement
+function updatePriceElements(prices) {
+    if (!prices) return;
+    
+    prices.forEach(crypto => {
+        const card = document.querySelector(`[data-crypto="${crypto.symbol}"]`);
+        if (card) {
+            const priceElement = card.querySelector('.crypto-price');
+            if (priceElement) {
+                priceElement.textContent = `${crypto.price.toLocaleString('fr-FR', {minimumFractionDigits: 2})}€`;
+                
+                // Animation de mise à jour
+                card.style.transition = 'all 0.3s ease';
+                card.style.transform = 'scale(1.02)';
+                card.style.boxShadow = '0 8px 25px rgba(149, 190, 207, 0.4)';
+                
+                setTimeout(() => {
+                    card.style.transform = 'scale(1)';
+                    card.style.boxShadow = '';
+                }, 300);
+            }
+        }
+    });
+}
+
+// Démarrer l'auto-refresh par défaut
+document.addEventListener('DOMContentLoaded', function() {
+    toggleAutoRefresh();
+});
+</script>
+{% endblock %}

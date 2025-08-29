@@ -1,0 +1,336 @@
+{% extends 'admin/base.html.twig' %}
+
+{% block title %}Portefeuille de {{ user.username }} - Backoffice Crypto{% endblock %}
+{% block page_title %}Portefeuille de {{ user.username }}{% endblock %}
+
+{% block body %}
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Informations utilisateur</h5>
+                <p><strong>Nom:</strong> {{ user.username }}</p>
+                <p><strong>Email:</strong> {{ user.email }}</p>
+                <p><strong>Inscription:</strong> {{ user.createdAt|date('d/m/Y') }}</p>
+                <p><strong>Status:</strong> 
+                    {% if user.isActive %}
+                        <span class="badge bg-success">Actif</span>
+                    {% else %}
+                        <span class="badge bg-danger">Inactif</span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Valeur totale du portefeuille</h5>
+                <h2 class="text-success" id="total-portfolio-value" data-original-value="{{ portfolioValue }}">{{ portfolioValue|number_format(2, ',', ' ') }}€</h2>
+                <p class="text-muted">Répartie sur {{ wallets|length }} cryptomonnaies</p>
+                <div class="d-flex align-items-center mt-2">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="auto-refresh-wallet" checked>
+                        <label class="form-check-label" for="auto-refresh-wallet">
+                            <small>Mise à jour automatique</small>
+                        </label>
+                    </div>
+                    <small class="text-muted ms-2" id="last-update-wallet">Dernière MAJ: maintenant</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-wallet"></i> Portefeuilles</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Crypto</th>
+                                <th>Balance</th>
+                                <th>Valeur actuelle</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for wallet in wallets %}
+                            {% if wallet.balanceValue > 0 %}
+                            <tr>
+                                <td>
+                                    <span class="badge bg-primary">{{ wallet.crypto.symbol }}</span>
+                                    <small class="d-block text-muted">{{ wallet.crypto.name }}</small>
+                                </td>
+                                <td>{{ wallet.balance|number_format(8, '.', '') }}</td>
+                                <td>
+                                    <strong class="crypto-value" 
+                                            data-crypto-id="{{ wallet.crypto.id }}"
+                                            data-balance="{{ wallet.balance }}"
+                                            data-original-value="{{ wallet.currentValue }}">
+                                        {{ wallet.currentValue|number_format(2, ',', ' ') }}€
+                                    </strong>
+                                    <small class="d-block text-muted crypto-change" data-crypto-id="{{ wallet.crypto.id }}">
+                                        --
+                                    </small>
+                                </td>
+                                <td>
+                                    {% if not user.isSuperAdmin %}
+                                    <button class="btn btn-sm btn-outline-danger" 
+                                            onclick="stealCrypto({{ user.id }}, {{ wallet.crypto.id }}, '{{ wallet.balance }}', '{{ wallet.crypto.symbol }}')"
+                                            title="Voler cette crypto">
+                                        <i class="fas fa-hand-holding-usd"></i>
+                                    </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center">Aucun portefeuille avec des fonds</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-history"></i> Historique des transactions</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-sm">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Crypto</th>
+                                <th>Montant</th>
+                                <th>Valeur</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for transaction in transactions %}
+                            <tr>
+                                <td>{{ transaction.createdAt|date('d/m H:i') }}</td>
+                                <td>
+                                    <span class="transaction-type-{{ transaction.type|replace({'_': '-'}) }}">
+                                        {{ transaction.typeLabel }}
+                                    </span>
+                                </td>
+                                <td>{{ transaction.crypto.symbol }}</td>
+                                <td>{{ transaction.amount|number_format(4, '.', '') }}</td>
+                                <td>{{ transaction.totalValue|number_format(2, ',', ' ') }}€</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center">Aucune transaction</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal pour vol de crypto -->
+<div class="modal fade" id="stealModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">Transfert administrateur</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Transférer <strong id="cryptoSymbol"></strong> depuis <strong>{{ user.username }}</strong></p>
+                
+                <form id="stealForm" method="post" action="{{ path('admin_transfer_crypto') }}">
+                    <input type="hidden" id="stealUserId" name="from_user_id" value="{{ user.id }}">
+                    <input type="hidden" id="stealCryptoId" name="crypto_id">
+                    
+                    <div class="mb-3">
+                        <label for="stealAmount" class="form-label">Montant disponible</label>
+                        <input type="text" class="form-control" id="availableAmount" readonly>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="stealAmount" class="form-label">Montant à transférer</label>
+                        <input type="number" step="0.00000001" class="form-control" id="stealAmount" name="amount" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="setMaxAmount()">
+                            Tout prendre
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-danger" onclick="submitSteal()">
+                    <i class="fas fa-hand-holding-usd"></i> Transférer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let stealModal;
+let autoRefreshWallet = true;
+let refreshWalletInterval;
+
+document.addEventListener('DOMContentLoaded', function() {
+    stealModal = new bootstrap.Modal(document.getElementById('stealModal'));
+    
+    // Démarrer la mise à jour automatique
+    startWalletAutoRefresh();
+    
+    // Gérer le toggle auto-refresh
+    document.getElementById('auto-refresh-wallet').addEventListener('change', function() {
+        autoRefreshWallet = this.checked;
+        if (autoRefreshWallet) {
+            startWalletAutoRefresh();
+        } else {
+            stopWalletAutoRefresh();
+        }
+    });
+});
+
+function startWalletAutoRefresh() {
+    if (refreshWalletInterval) {
+        clearInterval(refreshWalletInterval);
+    }
+    
+    refreshWalletInterval = setInterval(updateWalletValues, 3000); // Mise à jour toutes les 3 secondes
+    updateWalletValues(); // Première mise à jour immédiate
+}
+
+function stopWalletAutoRefresh() {
+    if (refreshWalletInterval) {
+        clearInterval(refreshWalletInterval);
+        refreshWalletInterval = null;
+    }
+}
+
+function updateWalletValues() {
+    if (!autoRefreshWallet) return;
+    
+    fetch('/admin/api/crypto-prices')
+        .then(response => response.json())
+        .then(prices => {
+            let totalPortfolioValue = 0;
+            
+            // Mettre à jour chaque crypto dans le portefeuille
+            document.querySelectorAll('.crypto-value').forEach(element => {
+                const cryptoId = parseInt(element.dataset.cryptoId);
+                const balance = parseFloat(element.dataset.balance);
+                const originalValue = parseFloat(element.dataset.originalValue);
+                
+                if (prices[cryptoId]) {
+                    const newPrice = parseFloat(prices[cryptoId]);
+                    const newValue = balance * newPrice;
+                    const changePercent = originalValue > 0 ? ((newValue - originalValue) / originalValue * 100) : 0;
+                    
+                    // Mettre à jour la valeur affichée
+                    element.textContent = new Intl.NumberFormat('fr-FR', {
+                        style: 'currency',
+                        currency: 'EUR',
+                        minimumFractionDigits: 2
+                    }).format(newValue);
+                    
+                    // Mettre à jour l'indication de changement
+                    const changeElement = document.querySelector(`.crypto-change[data-crypto-id="${cryptoId}"]`);
+                    if (changeElement) {
+                        const changeClass = changePercent >= 0 ? 'text-success' : 'text-danger';
+                        const changeIcon = changePercent >= 0 ? '↗' : '↘';
+                        changeElement.className = `d-block text-muted crypto-change ${changeClass}`;
+                        changeElement.textContent = `${changeIcon} ${Math.abs(changePercent).toFixed(2)}%`;
+                    }
+                    
+                    // Ajouter à la valeur totale du portefeuille
+                    totalPortfolioValue += newValue;
+                }
+            });
+            
+            // Mettre à jour la valeur totale du portefeuille
+            const portfolioElement = document.getElementById('total-portfolio-value');
+            if (portfolioElement) {
+                const originalValue = parseFloat(portfolioElement.dataset.originalValue);
+                const changePercent = originalValue > 0 ? ((totalPortfolioValue - originalValue) / originalValue * 100) : 0;
+                
+                portfolioElement.textContent = new Intl.NumberFormat('fr-FR', {
+                    style: 'currency',
+                    currency: 'EUR',
+                    minimumFractionDigits: 2
+                }).format(totalPortfolioValue);
+                
+                // Ajouter une classe pour indiquer le changement
+                portfolioElement.className = changePercent >= 0 ? 'text-success' : 'text-danger';
+            }
+            
+            // Mettre à jour l'heure de dernière mise à jour
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('fr-FR', { 
+                hour: '2-digit', 
+                minute: '2-digit', 
+                second: '2-digit' 
+            });
+            document.getElementById('last-update-wallet').textContent = `Dernière MAJ: ${timeString}`;
+            
+            // Notification subtile de mise à jour
+            if (document.querySelectorAll('.crypto-value').length > 0) {
+                showNotification('Valeurs du portefeuille mises à jour', 'info', 1000);
+            }
+        })
+        .catch(error => {
+            console.error('Erreur lors de la mise à jour des prix:', error);
+            document.getElementById('last-update-wallet').textContent = 'Erreur de mise à jour';
+        });
+}
+
+function stealCrypto(userId, cryptoId, balance, symbol) {
+    document.getElementById('stealUserId').value = userId;
+    document.getElementById('stealCryptoId').value = cryptoId;
+    document.getElementById('availableAmount').value = balance;
+    document.getElementById('cryptoSymbol').textContent = symbol;
+    document.getElementById('stealAmount').value = '';
+    document.getElementById('stealAmount').max = balance;
+    
+    stealModal.show();
+}
+
+function setMaxAmount() {
+    const maxAmount = document.getElementById('availableAmount').value;
+    document.getElementById('stealAmount').value = maxAmount;
+}
+
+function submitSteal() {
+    const amount = parseFloat(document.getElementById('stealAmount').value);
+    const maxAmount = parseFloat(document.getElementById('availableAmount').value);
+    
+    if (amount > maxAmount) {
+        alert('Le montant ne peut pas être supérieur au solde disponible');
+        return;
+    }
+    
+    if (!confirm('Êtes-vous sûr de vouloir effectuer ce transfert ? Cette action est irréversible.')) {
+        return;
+    }
+    
+    document.getElementById('stealForm').submit();
+}
+</script>
+{% endblock %}
