@@ -1,28 +1,16 @@
-# Crypto Backoffice - Interface d'Administration
+Projet Crypto Symfony
 
-### 1. Cloner ou télécharger le projet
-git clone <url-du-projet> crypto-backoffice
-cd crypto-backoffice
-
-### 2. Installer les dépendances
+Installer les dépendances
 composer install
 
-# Modifier les paramètres dans .env si besoin
-
-### 4. Initialiser la base de données
-
-# Créer la base de données
-php bin/console doctrine:database:create
-
-# Exécuter les migrations
-php bin/console doctrine:migrations:migrate
-
-# Charger les données de démonstration
-php bin/console app:init-data
-
-### 5. Lancer le serveur de développement
+Lancer le serveur
 php -S localhost:8000 -t public
-```
 
-### Accéder à l'application
-Ouvrez votre navigateur et allez sur : **http://localhost:8000**
+
+Accéder à l'application
+**http://localhost:8000**
+
+Si besoin de se connecter : admin@crypto.com 
+                                password
+
+Il n'y a pas de base de donnée relier au projet, seulement des utilisateur en brut dans le code.
